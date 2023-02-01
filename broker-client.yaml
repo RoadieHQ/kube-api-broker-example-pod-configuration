@@ -1,0 +1,86 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: read-stuff
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - configmaps
+      - services
+      - deployments
+      - replicasets
+      - horizontalpodautoscalers
+      - ingresses
+    verbs: 
+      - "get"
+      - "list"
+      - "watch"
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: 
+      - "get"
+      - "list"
+      - "watch"
+  - apiGroups: ["extensions", "apps", "autoscaling", "networking.k8s.io"]
+    resources: ["deployments", "ingresses", "replicasets", "horizontalpodautoscalers"]
+    verbs: 
+      - "get"
+      - "list"
+      - "watch"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: broker-pod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: broker-pod-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: read-stuff
+subjects:
+  - kind: ServiceAccount
+    name: broker-pod
+    namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broker-client
+  labels:
+    app: broker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broker
+  template:
+    metadata:
+      labels:
+        app: broker
+    spec:
+      serviceAccountName: broker-pod
+      containers:
+      - name: broker
+        image: localhost:5000/kube-broker:7
+        imagePullPolicy: Always
+        env:
+          - name: BROKER_TOKEN
+            value: kube-api
+          - name: BROKER_SERVER_URL
+            value: https://roadie.broker.roadie.so
+          - name: ACCEPT
+            value: /home/node/accept.json
+          - name: CLUSTER_ENDPOINT
+            value: https://kubernetes.default
+          - name: CA_CERT
+            value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        ports:
+        - containerPort: 8000
